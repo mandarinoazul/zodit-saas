@@ -1,0 +1,11 @@
+# Local Agent specific gitignore
+.env
+*.db
+*.log
+__pycache__/
+.venv/
+.wwebjs_auth/
+.wwebjs_cache/
+ffmpeg.exe
+assets/semantic_cache.json
+monitoring/data/
