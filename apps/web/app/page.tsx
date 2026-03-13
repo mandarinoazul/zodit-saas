@@ -7,6 +7,7 @@ import { Loader2, Terminal as TerminalIcon, ShieldCheck, Zap } from "lucide-reac
 function DashboardContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
+  const [isLogged, setIsLogged] = useState(false);
   const [activeTab, setActiveTab] = useState<'commander' | 'assets' | 'billing' | 'nodes'>('commander');
   const [command, setCommand] = useState("");
   const [responses, setResponses] = useState<{ type: 'user' | 'bot' | 'error', text: string }[]>([]);
@@ -18,6 +19,29 @@ function DashboardContent() {
       setActiveTab(tab);
     }
   }, [searchParams]);
+
+  if (!isLogged) {
+    return (
+      <div className="flex-1 flex items-center justify-center p-4">
+        <div className="max-w-md w-full bg-zinc-900/60 border border-white/5 rounded-[40px] p-12 space-y-8 backdrop-blur-3xl shadow-2xl animate-in fade-in zoom-in duration-700">
+          <div className="text-center space-y-2">
+            <h2 className="text-3xl font-black tracking-tighter uppercase">Neural Access</h2>
+            <p className="text-gold text-[10px] font-black uppercase tracking-[0.2em]">Authentication Required</p>
+          </div>
+          <div className="space-y-4">
+            <input type="password" placeholder="Access Key" className="w-full bg-black/60 border border-white/5 rounded-2xl px-6 py-4 font-bold placeholder:text-white/10 text-center" />
+            <button 
+              onClick={() => setIsLogged(true)}
+              className="w-full bg-white text-black font-black uppercase tracking-widest text-xs py-5 rounded-2xl hover:bg-gold transition-all shadow-xl"
+            >
+              Verify Identity
+            </button>
+            <p className="text-center text-[9px] text-white/20 font-bold uppercase tracking-widest pt-4">Sovereign Data Protection Active</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const handleExecute = async () => {
     if (!command.trim()) return;
