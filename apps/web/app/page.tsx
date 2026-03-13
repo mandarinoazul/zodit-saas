@@ -5,11 +5,16 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { Loader2, Terminal as TerminalIcon, ShieldCheck, Zap } from "lucide-react";
 
 import { fetchWithKey } from "../lib/api";
+import { supabase } from "../lib/supabase";
+import { User } from "@supabase/supabase-js";
 
 function DashboardContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const [isLogged, setIsLogged] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPass, setAuthPass] = useState("");
+  const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
   const [activeTab, setActiveTab] = useState<'commander' | 'knowledge' | 'skills' | 'nodes' | 'billing'>('commander');
   const [command, setCommand] = useState("");
   const [responses, setResponses] = useState<{ type: 'user' | 'bot' | 'error', text: string }[]>([]);
@@ -19,16 +24,30 @@ function DashboardContent() {
   const [activeModel, setActiveModel] = useState("");
 
   useEffect(() => {
+    const checkUser = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      setUser(session?.user || null);
+    };
+    checkUser();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user || null);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
     const tab = searchParams.get('tab') as any;
     if (tab && ['commander', 'knowledge', 'skills', 'nodes', 'billing'].includes(tab)) {
       setActiveTab(tab);
     }
     // Fetch initial data
-    if (isLogged) {
+    if (user) {
         loadSkills();
         loadModels();
     }
-  }, [searchParams, isLogged]);
+  }, [searchParams, user]);
 
   const loadSkills = async () => {
       try {
@@ -64,7 +83,29 @@ function DashboardContent() {
     } catch (e) { alert("Error switching model"); }
   };
 
-  if (!isLogged) {
+  const handleAuth = async () => {
+    setIsLoading(true);
+    try {
+        if (authMode === 'login') {
+            const { error } = await supabase.auth.signInWithPassword({ email: authEmail, password: authPass });
+            if (error) throw error;
+        } else {
+            const { error } = await supabase.auth.signUp({ email: authEmail, password: authPass });
+            if (error) throw error;
+            alert("Check your email for confirmation!");
+        }
+    } catch (e: any) {
+        alert(e.message);
+    } finally {
+        setIsLoading(false);
+    }
+  };
+
+  const signOut = async () => {
+    await supabase.auth.signOut();
+  };
+
+  if (!user) {
     return (
       <div className="flex-1 flex items-center justify-center p-4 min-h-screen bg-black">
         <div className="max-w-md w-full bg-zinc-900/40 border border-white/5 rounded-[48px] p-12 space-y-10 backdrop-blur-3xl shadow-2xl animate-in fade-in zoom-in duration-1000">
@@ -72,29 +113,56 @@ function DashboardContent() {
             <div className="w-16 h-16 bg-gold/5 rounded-full flex items-center justify-center mx-auto border border-gold/10 mb-2">
                 <ShieldCheck className="text-gold" size={32} />
             </div>
-            <h2 className="text-4xl font-black tracking-tighter uppercase italic">Neural Sync</h2>
+            <h2 className="text-4xl font-black tracking-tighter uppercase italic">Neural <span className="text-gold">SaaS</span></h2>
             <p className="text-gold/60 text-[10px] font-black uppercase tracking-[0.3em]">Accessing Sovereign Node</p>
           </div>
+          
           <div className="space-y-6">
-            <input 
-                type="password" 
-                placeholder="Secure Access Key" 
-                className="w-full bg-black/40 border border-white/5 rounded-3xl px-8 py-5 font-bold placeholder:text-white/5 text-center focus:border-gold/30 transition-all outline-none" 
-            />
+            <div className="flex rounded-2xl bg-white/5 p-1 border border-white/5">
+                <button 
+                  onClick={() => setAuthMode('login')}
+                  className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${authMode === 'login' ? 'bg-white text-black' : 'text-white/40'}`}
+                >
+                    Login
+                </button>
+                <button 
+                  onClick={() => setAuthMode('signup')}
+                  className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${authMode === 'signup' ? 'bg-white text-black' : 'text-white/40'}`}
+                >
+                    Register
+                </button>
+            </div>
+
+            <div className="space-y-4">
+                <input 
+                    type="email" 
+                    placeholder="Email Address" 
+                    value={authEmail}
+                    onChange={(e) => setAuthEmail(e.target.value)}
+                    className="w-full bg-black/40 border border-white/5 rounded-2xl px-8 py-5 font-bold placeholder:text-white/5 focus:border-gold/30 transition-all outline-none" 
+                />
+                <input 
+                    type="password" 
+                    placeholder="Secure Password" 
+                    value={authPass}
+                    onChange={(e) => setAuthPass(e.target.value)}
+                    className="w-full bg-black/40 border border-white/5 rounded-2xl px-8 py-5 font-bold placeholder:text-white/5 focus:border-gold/30 transition-all outline-none" 
+                />
+            </div>
+
             <button 
-              onClick={() => setIsLogged(true)}
+              onClick={handleAuth}
+              disabled={isLoading}
               className="group relative w-full overflow-hidden rounded-3xl"
             >
               <div className="absolute inset-0 bg-gradient-to-r from-gold via-yellow-400 to-gold animate-gradient-x" />
-              <div className="relative bg-white/90 hover:bg-transparent text-black font-black uppercase tracking-widest text-[11px] py-6 transition-all">
-                Authenticate Identity
+              <div className="relative bg-white/90 hover:bg-transparent text-black font-black uppercase tracking-widest text-[11px] py-6 transition-all flex items-center justify-center gap-3">
+                {isLoading ? <Loader2 className="animate-spin" size={16} /> : "Authenticate Identity"}
               </div>
             </button>
           </div>
+
           <div className="pt-4 flex flex-col items-center gap-1 opacity-20 hover:opacity-100 transition-opacity">
-            <div className="flex gap-1">
-                {[1,2,3,4,5].map(i => <div key={i} className="w-1 h-3 bg-white rounded-full animate-pulse" style={{animationDelay: `${i*0.2}s`}} />)}
-            </div>
             <p className="text-[8px] font-black uppercase tracking-[0.4em]">Zodit Gold Security Engine</p>
           </div>
         </div>
@@ -163,7 +231,10 @@ function DashboardContent() {
                     </div>
                 </div>
             </div>
-            <button className="w-full flex items-center justify-center md:justify-start gap-4 px-4 py-3 rounded-2xl hover:bg-white/5 transition-all text-white/30 hover:text-white">
+                  <button 
+                onClick={signOut}
+                className="w-full flex items-center justify-center md:justify-start gap-4 px-4 py-3 rounded-2xl hover:bg-white/5 transition-all text-white/30 hover:text-white"
+            >
                 <Loader2 size={18} />
                 <span className="hidden md:block text-[11px] font-black uppercase tracking-widest">Sign Out</span>
             </button>
@@ -177,7 +248,7 @@ function DashboardContent() {
         <header className="h-24 border-b border-white/5 flex items-center justify-between px-12 shrink-0">
             <div className="flex items-center gap-4">
                 <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_10px_#10b981]" />
-                <h2 className="text-xs font-black uppercase tracking-[0.3em] opacity-40">Synchronized Node: <span className="text-white">mandev.site</span></h2>
+                <h2 className="text-xs font-black uppercase tracking-[0.3em] opacity-40">User Node: <span className="text-white">{user.email}</span></h2>
             </div>
             <div className="flex items-center gap-6">
                 <div className="hidden lg:flex items-center gap-2 px-4 py-2 bg-white/5 border border-white/5 rounded-xl">
