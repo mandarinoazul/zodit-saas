@@ -392,12 +392,11 @@ async def process_message(text: str, session_id: str, user_id: str = "anonymous"
     user_enabled_skills = get_user_skills(user_id)
     if user_enabled_skills.get("rag"):
         try:
-            relevant_docs = memory.search_memory(text, n_results=2)
+            relevant_docs = memory.search_memory(text, n_results=2, user_id=user_id)
             if relevant_docs:
-                rag_context = "\n\n### CONTEXTO ADICIONAL (RAG):\n" + "\n---\n".join(relevant_docs)
-                log.info(f"[RAG] Context injected into prompt ({len(relevant_docs)} docs)")
-                # Inject into system prompt for this turn only
-                history[0]["content"] += rag_context
+                context = "\n".join(relevant_docs)
+                text = f"Contexto relevante de tu base de conocimientos:\n{context}\n\nPregunta del usuario: {text}"
+                log.info(f"[RAG] Context injected for user {user_id}")
         except Exception as e:
             log.error(f"[RAG] Search error: {e}")
 

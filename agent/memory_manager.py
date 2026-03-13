@@ -28,13 +28,21 @@ class MemoryManager:
             ids=[str(uuid.uuid4())]
         )
 
-    def search_memory(self, query: str, n_results: int = 3) -> List[str]:
-        """Busca en la memoria de trabajo actual."""
-        results = self.collection.query(
-            query_texts=[query],
-            n_results=n_results
-        )
-        return results['documents'][0] if results['documents'] else []
+    def search_memory(self, query, n_results=5, user_id=None):
+        if not self.collection: return []
+        
+        where_filter = {"user_id": user_id} if user_id else None
+        
+        try:
+            results = self.collection.query(
+                query_texts=[query],
+                n_results=n_results,
+                where=where_filter
+            )
+            return results.get("documents", [[]])[0]
+        except Exception as e:
+            print(f"Error searching memory: {e}")
+            return []
 
     def reset_memory(self):
         """Limpia toda la memoria de trabajo eliminando y recreando la colección."""
