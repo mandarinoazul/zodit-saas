@@ -25,10 +25,10 @@ export default function RootLayout({
                 <h1 className="text-xl font-black tracking-tighter bg-clip-text text-transparent bg-gradient-to-r from-white to-white/60">ZODIT GOLD</h1>
               </div>
               <nav className="hidden md:flex gap-8 text-[13px] font-bold uppercase tracking-widest text-white/40">
-                <a href="#" className="hover:text-gold text-white transition-colors">Commander</a>
-                <a href="#" className="hover:text-gold transition-colors">Neural Assets</a>
-                <a href="#" className="hover:text-gold transition-colors">Subscription</a>
-                <a href="#" className="hover:text-gold transition-colors">Node Settings</a>
+                <a href="?tab=commander" className="hover:text-gold transition-colors">Commander</a>
+                <a href="?tab=assets" className="hover:text-gold transition-colors">Neural Assets</a>
+                <a href="?tab=billing" className="hover:text-gold transition-colors">Subscription</a>
+                <a href="?tab=nodes" className="hover:text-gold transition-colors">Node Settings</a>
               </nav>
               <div className="flex items-center gap-4">
                 <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.5)]" />

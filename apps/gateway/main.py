@@ -45,13 +45,22 @@ async def get_subscription_tier(user_id: str) -> str:
             print(f"Error checking subscription: {e}")
         return "free"
 
-async def validate_pro_user(token: HTTPAuthorizationCredentials = Security(auth_scheme)):
-    """Validate that the user is logged in and has an active subscription."""
-    # Logic to decode Better-Auth JWT/Session would go here
-    # For now, we assume the token is validated by a higher-level middleware or proxy
-    user_id = "mock_user_from_token" 
+async def validate_pro_user(request: Request):
+    """Validate user subscription. Bypasses check if legitimate backend key is present."""
+    # Check for internal bypass (e.g., from our own trusted frontend or for testing)
+    api_key = request.headers.get("X-API-Key")
+    if api_key and api_key == GATEWAY_SECRET:
+        return {"user_id": "root_admin", "tier": "pro"}
+
+    # Placeholder for Better-Auth validation
+    auth_header = request.headers.get("Authorization")
+    if not auth_header:
+        raise HTTPException(status_code=401, detail="Missing Authentication")
     
+    # In a real scenario, decode JWT here. For now, we use a mock for PRO test.
+    user_id = "mock_user_from_token" 
     tier = await get_subscription_tier(user_id)
+    
     if tier not in ["pro", "enterprise"]:
         raise HTTPException(status_code=403, detail="Active Pro subscription required.")
     
