@@ -1,0 +1,8 @@
+def open_application(app_name: str): return f"Abriendo {app_name}..."
+def get_running_processes(): return "Lista de procesos simulada."
+def system_info(): return "Windows 11 | CPU: 10% | RAM: 45%"
+def take_screenshot(): return "Captura realizada."
+def get_clipboard(): return "Contenido del portapapeles."
+def set_clipboard(text: str): return "Texto copiado."
+def get_window_list(): return "Ventana Activa: Visual Studio Code"
+def focus_window(window_name: str): return f"Enfocando {window_name}..."

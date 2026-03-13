@@ -12,8 +12,6 @@ from dotenv import load_dotenv
 # =================================================================
 
 BASE_DIR   = Path(os.path.dirname(os.path.abspath(__file__)))
-SKILLS_DIR = BASE_DIR / "skills" / "sales-assistant"
-SCRIPTS_DIR = SKILLS_DIR / "scripts"
 
 load_dotenv(BASE_DIR / ".env")
 
@@ -73,9 +71,9 @@ def launch() -> None:
         python_exe = sys.executable
 
     service_defs = [
-        ("WS-Session",  ["node", str(SCRIPTS_DIR / "whatsapp_service.js")], "WhatsApp Bridge"),
+        ("WS-Session",  ["node", str(BASE_DIR / "whatsapp_service.js")], "WhatsApp Bridge"),
         ("Jarvis-Core", [python_exe, str(BASE_DIR / "jarvis_core.py")], "JARVIS Core"),
-        ("Dashboard",   [python_exe, str(SCRIPTS_DIR / "dashboard.py")], "Dashboard Web")
+        ("Dashboard",   [python_exe, str(BASE_DIR / "dashboard.py")], "Dashboard Web")
     ]
 
     for name, cmd, desc in service_defs:
@@ -96,9 +94,9 @@ if __name__ == "__main__":
             python_exe = sys.executable
 
         service_cmds = {
-            "WS-Session":  ["node", str(SCRIPTS_DIR / "whatsapp_service.js")],
+            "WS-Session":  ["node", str(BASE_DIR / "whatsapp_service.js")],
             "Jarvis-Core": [python_exe, str(BASE_DIR / "jarvis_core.py")],
-            "Dashboard":   [python_exe, str(SCRIPTS_DIR / "dashboard.py")]
+            "Dashboard":   [python_exe, str(BASE_DIR / "dashboard.py")]
         }
 
         while True:

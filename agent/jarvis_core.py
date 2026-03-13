@@ -260,6 +260,19 @@ jarvis.register_module(whatsapp_tools)
 jarvis.register_module(voice_tools)
 jarvis.register_module(drive_tools)
 
+# Mapa de estados de módulos para toggle dinámico
+module_states = {
+    "pc_control": True,
+    "whatsapp": True,
+    "rag": True,
+    "web": True,
+    "vision": True,
+    "system": True,
+    "voice": True,
+    "calendar": True,
+    "drive": True
+}
+
 log.info(f"JARVIS registry loaded: {len(jarvis.tools)} tools active.")
 
 # ============================================================
@@ -352,6 +365,18 @@ async def process_message(text: str, session_id: str) -> str:
         log.info(f"[CACHE] Hit for: {text[:30]}...")
         badge = "⚡ *[JARVIS CACHE]*\n"
         return badge + cached_response
+
+    # 0.1 AUTOMATIC RAG: Search memory for relevant context
+    if module_states.get("rag"):
+        try:
+            relevant_docs = memory.search_memory(text, n_results=2)
+            if relevant_docs:
+                rag_context = "\n\n### CONTEXTO ADICIONAL (RAG):\n" + "\n---\n".join(relevant_docs)
+                log.info(f"[RAG] Context injected into prompt ({len(relevant_docs)} docs)")
+                # Inject into system prompt for this turn only
+                history[0]["content"] += rag_context
+        except Exception as e:
+            log.error(f"[RAG] Search error: {e}")
 
     history.append({"role": "user", "content": text})
 
@@ -455,9 +480,17 @@ async def process_message(text: str, session_id: str) -> str:
 # ============================================================
 @app.post("/chat")
 @app.post("/api/chat")
+@app.post("/agent/execute")
 @limiter.limit("30/minute")
-async def chat_endpoint(request: Request, body: ChatRequest, _: str = Depends(verify_api_key)):
-    response = await process_message(body.message, body.session_id)
+async def chat_endpoint(request: Request, body: Dict[str, Any], _: str = Depends(verify_api_key)):
+    # Soporte para campos 'message' o 'command'
+    text = body.get("message") or body.get("command")
+    session_id = body.get("session_id", "default")
+    
+    if not text:
+        raise HTTPException(status_code=400, detail="Missing 'message' or 'command' field.")
+        
+    response = await process_message(text, session_id)
     return {"response": response}
 
 @app.post("/webhook")
@@ -587,16 +620,61 @@ async def health():
 async def get_telemetry(_: str = Depends(verify_api_key)):
     return {"logs": telemetry_logs}
 
+@app.get("/api/ollama/models")
+async def list_models():
+    """Proxy to list available Ollama models."""
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(f"{OLLAMA_HOST}/api/tags")
+            if resp.status_code == 200:
+                return resp.json().get("models", [])
+            return []
+    except Exception as e:
+        log.error(f"Error listing models: {e}")
+        return []
+
+@app.post("/api/system/config")
+async def update_config(body: Dict[str, Any], _: str = Depends(verify_api_key)):
+    """Update global config like active model or settings."""
+    global MODEL
+    new_model = body.get("model")
+    if new_model:
+        MODEL = new_model
+        log.info(f"Active model switched to: {MODEL}")
+        return {"status": "ok", "message": f"Model switched to {MODEL}"}
+    return {"status": "error", "message": "No model specified"}
+
+@app.get("/api/skills")
+async def get_skills_status(_: str = Depends(verify_api_key)):
+    """Returns the list of modules and their toggle state."""
+    return [{"id": k, "enabled": v} for k, v in module_states.items()]
+
+@app.post("/api/skills/toggle")
+async def toggle_skill(body: Dict[str, Any], _: str = Depends(verify_api_key)):
+    """Enables or disables a specific module."""
+    module_id = body.get("id")
+    state = body.get("enabled")
+    if module_id in module_states:
+        module_states[module_id] = bool(state)
+        log.info(f"Module '{module_id}' state updated to: {state}")
+        return {"status": "ok", "module": module_id, "enabled": module_states[module_id]}
+    raise HTTPException(status_code=404, detail="Module not found")
+
 @app.get("/api/integrations")
 async def get_integrations():
-    mapping = {
-        "rag_bridge": "rag", "pc_control": "pc", "calendar_tools": "calendar",
-        "whatsapp_tools": "whatsapp", "vision_tools": "vision",
-        "web_tools": "search", "voice_tools": "voice", "system_stats": "system",
-        "drive_tools": "drive"
-    }
-    active_ids = list({mapping[func.__module__.split('.')[-1]] for _, func in jarvis.tools.items() if func.__module__.split('.')[-1] in mapping})
-    return [{"id": aid, "enabled": True} for aid in active_ids]
+    return [{"id": k, "enabled": v} for k, v in module_states.items()]
+
+@app.post("/api/knowledge/ingest")
+async def ingest_knowledge(body: Dict[str, Any], _: str = Depends(verify_api_key)):
+    """Add text to JARVIS's long-term memory."""
+    text = body.get("text")
+    source = body.get("source", "Web Dashboard")
+    if not text:
+        raise HTTPException(status_code=400, detail="Missing 'text' field.")
+    
+    memory.add_to_memory(text, {"source": source, "timestamp": str(datetime.now())})
+    log.info(f"[INGEST] New knowledge added from {source}: {text[:50]}...")
+    return {"status": "ok", "message": "Knowledge integrated successfully."}
 
 # ============================================================
 # STARTUP
