@@ -241,8 +241,8 @@ function DashboardContent() {
   return (
     <div className="flex min-h-screen bg-black text-white font-sans selection:bg-gold/30">
       
-      {/* PROFESSIONAL SIDEBAR */}
-      <aside className="w-24 md:w-80 border-r border-white/5 flex flex-col bg-zinc-950/50 backdrop-blur-3xl shrink-0 transition-all">
+      {/* SIDEBAR - HIDDEN ON MOBILE */}
+      <aside className="hidden md:flex flex-col w-80 border-r border-white/5 bg-zinc-950/50 backdrop-blur-3xl shrink-0">
         <div className="p-8 pb-12">
             <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-gold flex items-center justify-center shadow-[0_0_20px_rgba(255,215,0,0.3)]">
@@ -299,6 +299,22 @@ function DashboardContent() {
             </button>
         </div>
       </aside>
+
+      {/* MOBILE NAVIGATION DOCK */}
+      <nav className="md:hidden fixed bottom-6 left-6 right-6 h-20 bg-zinc-900/80 backdrop-blur-2xl border border-white/10 rounded-[32px] flex items-center justify-around px-6 z-50 shadow-2xl">
+        <button onClick={() => setActiveTab('commander')} className={`p-4 rounded-2xl transition-all ${activeTab === 'commander' ? 'bg-gold text-black scale-110' : 'text-white/40'}`}>
+            <TerminalIcon size={20} />
+        </button>
+        <button onClick={() => setActiveTab('knowledge')} className={`p-4 rounded-2xl transition-all ${activeTab === 'knowledge' ? 'bg-gold text-black scale-110' : 'text-white/40'}`}>
+            <Brain size={20} />
+        </button>
+        <button onClick={() => setActiveTab('nodes')} className={`p-4 rounded-2xl transition-all ${activeTab === 'nodes' ? 'bg-gold text-black scale-110' : 'text-white/40'}`}>
+            <Cpu size={20} />
+        </button>
+        <button onClick={() => setActiveTab('skills')} className={`p-4 rounded-2xl transition-all ${activeTab === 'skills' ? 'bg-gold text-black scale-110' : 'text-white/40'}`}>
+            <Zap size={20} />
+        </button>
+      </nav>
 
       {/* MAIN VIEWPORT */}
       <main className="flex-1 flex flex-col min-w-0">
