@@ -261,7 +261,12 @@ jarvis.register_module(voice_tools)
 jarvis.register_module(drive_tools)
 
 # Mapa de estados de módulos para toggle dinámico
-module_states = {
+# Multi-user skill management
+# user_skills[user_id] = { skill_id: enabled_bool }
+user_skills: Dict[str, Dict[str, bool]] = {}
+
+# Default module states for new users
+default_module_states = {
     "pc_control": True,
     "whatsapp": True,
     "rag": True,
@@ -272,6 +277,12 @@ module_states = {
     "calendar": True,
     "drive": True
 }
+
+def get_user_skills(user_id: str) -> Dict[str, bool]:
+    if user_id not in user_skills:
+        # Default skills for new user
+        user_skills[user_id] = {k: v for k, v in default_module_states.items()}
+    return user_skills[user_id]
 
 log.info(f"JARVIS registry loaded: {len(jarvis.tools)} tools active.")
 
@@ -318,16 +329,27 @@ def add_telemetry(event: str, details: str):
     if len(telemetry_logs) > 50:
         telemetry_logs.pop(0)
 
-def get_ollama_response(messages: List[Dict[str, Any]]) -> Dict[str, Any]:
+def get_ollama_response(messages: List[Dict[str, Any]], user_id: str) -> Dict[str, Any]:
     global OLLAMA_ALIVE
+    
+    # Filter tools based on user's enabled skills
+    user_enabled_skills = get_user_skills(user_id)
+    active_schemas = []
+    for schema in jarvis.schemas:
+        # Extract module name from tool name (e.g., "pc_control_tool" -> "pc_control")
+        tool_name = schema["function"]["name"]
+        module_id = tool_name.split('_')[0] # Simple heuristic, might need refinement
+        if user_enabled_skills.get(module_id, False): # Default to False if module not in user_skills
+            active_schemas.append(schema)
+
     payload = {
         "model": MODEL,
         "messages": messages,
-        "tools": jarvis.schemas,
+        "tools": active_schemas, # Use filtered schemas
         "stream": False,
         "options": {"num_ctx": CONTEXT_LIMIT}
     }
-    log.info(f"Querying Ollama model: {MODEL} (ctx={CONTEXT_LIMIT})")
+    log.info(f"Querying Ollama model: {MODEL} (ctx={CONTEXT_LIMIT}) with {len(active_schemas)} active tools for user {user_id}")
     try:
         with httpx.Client(timeout=120) as client:
             response = client.post(OLLAMA_URL, json=payload)
@@ -345,8 +367,8 @@ def get_ollama_response(messages: List[Dict[str, Any]]) -> Dict[str, Any]:
         log.error(f"Unexpected Ollama error: {e}")
         return {"role": "assistant", "content": f"Error inesperado: {str(e)[:100]}"}
 
-async def process_message(text: str, session_id: str) -> str:
-    log.info(f"Processing message for session '{session_id}': {text[:80]}...")
+async def process_message(text: str, session_id: str, user_id: str = "anonymous") -> str:
+    log.info(f"Processing message for session '{session_id}' (user '{user_id}'): {text[:80]}...")
     add_telemetry("MESSAGE", text[:50])
 
     history = load_session(session_id)
@@ -367,7 +389,8 @@ async def process_message(text: str, session_id: str) -> str:
         return badge + cached_response
 
     # 0.1 AUTOMATIC RAG: Search memory for relevant context
-    if module_states.get("rag"):
+    user_enabled_skills = get_user_skills(user_id)
+    if user_enabled_skills.get("rag"):
         try:
             relevant_docs = memory.search_memory(text, n_results=2)
             if relevant_docs:
@@ -381,7 +404,7 @@ async def process_message(text: str, session_id: str) -> str:
     history.append({"role": "user", "content": text})
 
     for i in range(5):  # Max agentic loop
-        response_msg = get_ollama_response(history)
+        response_msg = get_ollama_response(history, user_id)
 
         content = response_msg.get("content", "")
 
@@ -482,7 +505,7 @@ async def process_message(text: str, session_id: str) -> str:
 @app.post("/api/chat")
 @app.post("/agent/execute")
 @limiter.limit("30/minute")
-async def chat_endpoint(request: Request, body: Dict[str, Any], _: str = Depends(verify_api_key)):
+async def chat_endpoint(request: Request, body: Dict[str, Any], x_user_id: str = Header("anonymous"), _: str = Depends(verify_api_key)):
     # Soporte para campos 'message' o 'command'
     text = body.get("message") or body.get("command")
     session_id = body.get("session_id", "default")
@@ -490,7 +513,7 @@ async def chat_endpoint(request: Request, body: Dict[str, Any], _: str = Depends
     if not text:
         raise HTTPException(status_code=400, detail="Missing 'message' or 'command' field.")
         
-    response = await process_message(text, session_id)
+    response = await process_message(text, session_id, x_user_id)
     return {"response": response}
 
 @app.post("/webhook")
@@ -552,7 +575,7 @@ async def whatsapp_webhook(request: Request, body: WebhookRequest):
     if not message_text.strip():
         return {"status": "empty_request"}
 
-    response = await process_message(message_text, body.sender)
+    response = await process_message(message_text, body.sender, body.sender) # Use sender as user_id for webhooks
 
     # Voice reply
     voice_path = None
@@ -621,7 +644,7 @@ async def get_telemetry(_: str = Depends(verify_api_key)):
     return {"logs": telemetry_logs}
 
 @app.get("/api/ollama/models")
-async def list_models():
+async def list_models(_: str = Depends(verify_api_key)):
     """Proxy to list available Ollama models."""
     try:
         async with httpx.AsyncClient(timeout=10) as client:
@@ -645,35 +668,41 @@ async def update_config(body: Dict[str, Any], _: str = Depends(verify_api_key)):
     return {"status": "error", "message": "No model specified"}
 
 @app.get("/api/skills")
-async def get_skills_status(_: str = Depends(verify_api_key)):
-    """Returns the list of modules and their toggle state."""
-    return [{"id": k, "enabled": v} for k, v in module_states.items()]
+async def get_skills(x_user_id: str = Header("anonymous"), _: str = Depends(verify_api_key)):
+    """Return enabled states for the current user."""
+    skills_map = get_user_skills(x_user_id)
+    return [{"id": k, "enabled": v} for k, v in skills_map.items()]
 
 @app.post("/api/skills/toggle")
-async def toggle_skill(body: Dict[str, Any], _: str = Depends(verify_api_key)):
-    """Enables or disables a specific module."""
+async def toggle_skill(body: Dict[str, Any], x_user_id: str = Header("anonymous"), _: str = Depends(verify_api_key)):
+    """Toggle a module state for a user."""
     module_id = body.get("id")
-    state = body.get("enabled")
-    if module_id in module_states:
-        module_states[module_id] = bool(state)
-        log.info(f"Module '{module_id}' state updated to: {state}")
-        return {"status": "ok", "module": module_id, "enabled": module_states[module_id]}
-    raise HTTPException(status_code=404, detail="Module not found")
+    enabled = body.get("enabled")
+    
+    skills_map = get_user_skills(x_user_id)
+    if module_id in skills_map:
+        skills_map[module_id] = enabled
+        log.info(f"[CONFIG] User {x_user_id} toggled {module_id}: {enabled}")
+        return {"status": "ok", "id": module_id, "enabled": enabled}
+    
+    raise HTTPException(status_code=404, detail="Skill not found")
 
 @app.get("/api/integrations")
 async def get_integrations():
-    return [{"id": k, "enabled": v} for k, v in module_states.items()]
+    # This endpoint might be deprecated or repurposed given the new /api/skills
+    # For now, it returns the default module states as a fallback or for general info
+    return [{"id": k, "enabled": v} for k, v in default_module_states.items()]
 
 @app.post("/api/knowledge/ingest")
-async def ingest_knowledge(body: Dict[str, Any], _: str = Depends(verify_api_key)):
-    """Add text to JARVIS's long-term memory."""
+async def ingest_knowledge(body: Dict[str, Any], x_user_id: str = Header("anonymous"), _: str = Depends(verify_api_key)):
+    """Add text to JARVIS's long-term memory, tagged by user."""
     text = body.get("text")
     source = body.get("source", "Web Dashboard")
     if not text:
         raise HTTPException(status_code=400, detail="Missing 'text' field.")
     
-    memory.add_to_memory(text, {"source": source, "timestamp": str(datetime.now())})
-    log.info(f"[INGEST] New knowledge added from {source}: {text[:50]}...")
+    memory.add_to_memory(text, {"user_id": x_user_id, "source": source, "timestamp": str(datetime.now())})
+    log.info(f"[INGEST] User {x_user_id} added knowledge: {text[:50]}...")
     return {"status": "ok", "message": "Knowledge integrated successfully."}
 
 # ============================================================
