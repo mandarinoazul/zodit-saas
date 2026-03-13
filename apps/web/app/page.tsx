@@ -1,4 +1,49 @@
+"use client";
+
+import { useState } from "react";
+import { Loader2, Terminal as TerminalIcon, ShieldCheck, Zap } from "lucide-react";
+
 export default function Home() {
+  const [command, setCommand] = useState("");
+  const [responses, setResponses] = useState<{ type: 'user' | 'bot' | 'error', text: string }[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+
+  const handleExecute = async () => {
+    if (!command.trim()) return;
+
+    const userMessage = command;
+    setCommand("");
+    setResponses(prev => [...prev, { type: 'user', text: userMessage }]);
+    setIsLoading(true);
+
+    try {
+      // API_GATEWAY_URL should be set in Vercel Env Vars
+      const gatewayUrl = process.env.NEXT_PUBLIC_GATEWAY_URL || "";
+      
+      const res = await fetch(`${gatewayUrl}/agent/execute`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          // The Authorization header would be handled by better-auth in a real scenario
+          // For this MVP transition, we might use a temporary token or session
+        },
+        body: JSON.stringify({ command: userMessage }),
+      });
+
+      if (!res.ok) {
+        throw new Error(`HTTP error! status: ${res.status}`);
+      }
+
+      const data = await res.json();
+      setResponses(prev => [...prev, { type: 'bot', text: data.response || JSON.stringify(data) }]);
+    } catch (error) {
+      console.error("Execution error:", error);
+      setResponses(prev => [...prev, { type: 'error', text: "Neural link failed. Verify Gateway connectivity." }]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <div className="flex-1 container mx-auto px-4 md:px-8 py-12 md:py-20">
       <div className="max-w-5xl mx-auto space-y-16">
@@ -21,6 +66,65 @@ export default function Home() {
           </p>
         </div>
 
+        {/* Neural Terminal / Responses */}
+        {responses.length > 0 && (
+          <div className="bg-black/80 border border-white/10 rounded-3xl p-6 font-mono text-sm space-y-4 max-h-[400px] overflow-y-auto scrollbar-hide">
+            <div className="flex items-center gap-2 text-white/30 border-b border-white/5 pb-2 mb-4">
+              <TerminalIcon size={14} />
+              <span className="uppercase tracking-widest text-[10px] font-bold">Neural Output Stream</span>
+            </div>
+            {responses.map((r, i) => (
+              <div key={i} className={`flex gap-3 ${r.type === 'user' ? 'text-white/40' : r.type === 'error' ? 'text-red-400' : 'text-gold'}`}>
+                <span className="shrink-0 opacity-50">{r.type === 'user' ? '>' : r.type === 'error' ? '!' : '#'}</span>
+                <p className="leading-relaxed whitespace-pre-wrap">{r.text}</p>
+              </div>
+            ))}
+            {isLoading && (
+              <div className="flex items-center gap-3 text-gold/50 animate-pulse">
+                <Loader2 className="animate-spin" size={14} />
+                <span>Processing instruction...</span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Command Interface */}
+        <div className="relative group">
+          <div className="absolute -inset-1 bg-gradient-to-r from-gold/20 to-transparent rounded-[32px] blur-xl opacity-50 group-hover:opacity-100 transition duration-500" />
+          <div className="relative bg-zinc-900/40 border border-white/10 backdrop-blur-2xl rounded-[32px] p-8 md:p-12 space-y-8">
+            <div className="flex justify-between items-center">
+              <h3 className="text-2xl font-black tracking-tight uppercase flex items-center gap-3">
+                <ShieldCheck className="text-gold" />
+                Neural Command
+              </h3>
+              <div className="hidden md:flex gap-2">
+                <div className="w-3 h-3 rounded-full bg-white/5" />
+                <div className="w-3 h-3 rounded-full bg-white/5" />
+                <div className="w-3 h-3 rounded-full bg-white/5" />
+              </div>
+            </div>
+            <div className="relative flex flex-col md:flex-row gap-4">
+              <input 
+                type="text" 
+                value={command}
+                onChange={(e) => setCommand(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleExecute()}
+                placeholder="Ask Zodit to perform a task..." 
+                className="flex-1 bg-black/50 border border-white/10 rounded-2xl px-6 py-4 text-lg focus:outline-none focus:border-gold/50 transition-all font-medium placeholder:text-white/20 text-white"
+                disabled={isLoading}
+              />
+              <button 
+                onClick={handleExecute}
+                disabled={isLoading}
+                className="bg-gradient-to-br from-gold to-yellow-600 text-black font-black uppercase tracking-widest text-sm px-10 py-4 rounded-2xl shadow-[0_10px_20px_rgba(255,215,0,0.2)] hover:shadow-[0_15px_30px_rgba(255,215,0,0.3)] hover:-translate-y-0.5 active:translate-y-0 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {isLoading ? <Loader2 className="animate-spin" /> : <Zap size={18} fill="currentColor" />}
+                {isLoading ? "Neural Sync..." : "Execute"}
+              </button>
+            </div>
+          </div>
+        </div>
+
         {/* Skill Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <SkillCard 
@@ -38,31 +142,6 @@ export default function Home() {
             desc="Deep RAG analysis on your local documents. Zero cloud leaks."
             icon="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"
           />
-        </div>
-
-        {/* Command Interface */}
-        <div className="relative group">
-          <div className="absolute -inset-1 bg-gradient-to-r from-gold/20 to-transparent rounded-[32px] blur-xl opacity-50 group-hover:opacity-100 transition duration-500" />
-          <div className="relative bg-zinc-900/40 border border-white/10 backdrop-blur-2xl rounded-[32px] p-8 md:p-12 space-y-8">
-            <div className="flex justify-between items-center">
-              <h3 className="text-2xl font-black tracking-tight uppercase">Neural Command</h3>
-              <div className="flex gap-2">
-                <div className="w-3 h-3 rounded-full bg-white/5" />
-                <div className="w-3 h-3 rounded-full bg-white/5" />
-                <div className="w-3 h-3 rounded-full bg-white/5" />
-              </div>
-            </div>
-            <div className="relative flex flex-col md:flex-row gap-4">
-              <input 
-                type="text" 
-                placeholder="Ask Zodit to perform a task..." 
-                className="flex-1 bg-black/50 border border-white/10 rounded-2xl px-6 py-4 text-lg focus:outline-none focus:border-gold/50 transition-all font-medium placeholder:text-white/20"
-              />
-              <button className="bg-gradient-to-br from-gold to-yellow-600 text-black font-black uppercase tracking-widest text-sm px-10 py-4 rounded-2xl shadow-[0_10px_20px_rgba(255,215,0,0.2)] hover:shadow-[0_15px_30px_rgba(255,215,0,0.3)] hover:-translate-y-0.5 active:translate-y-0 transition-all">
-                Execute
-              </button>
-            </div>
-          </div>
         </div>
       </div>
     </div>
