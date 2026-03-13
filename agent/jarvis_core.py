@@ -638,6 +638,26 @@ async def health():
         "system": f"CPU: {cpu}% | RAM: {ram}%"
     }
 
+@app.get("/api/whatsapp/status")
+async def whatsapp_status(_: str = Depends(verify_api_key)):
+    """Proxy to get WhatsApp bridge status."""
+    try:
+        async with httpx.AsyncClient(timeout=5) as client:
+            resp = await client.get(WHATSAPP_URL)
+            return resp.json()
+    except Exception:
+        return {"status": "offline"}
+
+@app.get("/api/whatsapp/qr")
+async def whatsapp_qr(_: str = Depends(verify_api_key)):
+    """Proxy to get WhatsApp QR code."""
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(f"{WHATSAPP_HOST}:{PORT_WHATSAPP}/qr")
+            return resp.json()
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
 @app.get("/api/telemetry")
 async def get_telemetry(_: str = Depends(verify_api_key)):
     return {"logs": telemetry_logs}

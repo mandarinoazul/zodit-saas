@@ -2,7 +2,7 @@
 
 import { useState, useEffect, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { Loader2, Terminal as TerminalIcon, ShieldCheck, Zap, Brain, Cpu, CreditCard } from "lucide-react";
+import { Loader2, Terminal as TerminalIcon, ShieldCheck, Zap, Brain, Cpu, CreditCard, MessageSquare, CheckCircle, Smartphone } from "lucide-react";
 
 import { fetchWithKey } from "../lib/api";
 import { supabase } from "../lib/supabase";
@@ -23,6 +23,9 @@ function DashboardContent() {
   const [models, setModels] = useState<any[]>([]);
   const [activeModel, setActiveModel] = useState("");
   const [customNodeUrl, setCustomNodeUrl] = useState('');
+  const [nodeStatus, setNodeStatus] = useState<{ status: string, cpu?: string, ram?: string } | null>(null);
+  const [waStatus, setWaStatus] = useState<string>('checking');
+  const [qrCode, setQrCode] = useState<string | null>(null);
 
   // Authentication & Initial Load
   useEffect(() => {
@@ -54,8 +57,41 @@ function DashboardContent() {
     if (user) {
         loadSkills();
         loadModels();
+        checkNodeHealth();
     }
   }, [searchParams, user]);
+
+  // Polling for Node Health & WhatsApp
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (activeTab === 'nodes' && user) {
+        interval = setInterval(() => {
+            checkNodeHealth();
+            checkWhatsAppStatus();
+        }, 5000);
+    }
+    return () => clearInterval(interval);
+  }, [activeTab, user]);
+
+  const checkNodeHealth = async () => {
+    try {
+        const data = await fetchWithKey('/api/system/health');
+        setNodeStatus(data);
+    } catch (e) { setNodeStatus({ status: 'offline' }); }
+  };
+
+  const checkWhatsAppStatus = async () => {
+    try {
+        const data = await fetchWithKey('/api/whatsapp/status');
+        setWaStatus(data.status);
+        if (data.status === 'qr_ready') {
+            const qrData = await fetchWithKey('/api/whatsapp/qr');
+            setQrCode(qrData.qr);
+        } else if (data.status === 'connected') {
+            setQrCode(null);
+        }
+    } catch (e) { setWaStatus('offline'); }
+  };
 
   const loadSkills = async () => {
       try {
@@ -386,65 +422,121 @@ function DashboardContent() {
                 )}
 
                 {activeTab === 'nodes' && (
-                    <div className="space-y-12 animate-in fade-in slide-in-from-bottom-4 duration-700">
-                        <div className="space-y-8">
-                            <h3 className="text-2xl font-black uppercase tracking-tighter">Model & Inference</h3>
-                            <div className="bg-white/5 border border-white/10 rounded-2xl p-6 mb-6">
-                  <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
-                    <div className="w-2 h-2 rounded-full bg-gold animate-pulse" />
-                    Sovereign Node Configuration
-                  </h3>
-                  <p className="text-sm text-white/40 mb-6">
-                    By default, ZODIT connects to our managed neural node. To use your own local JARVIS, enter your Gateway URL below.
-                  </p>
-                  
-                  <div className="space-y-4">
-                    <div>
-                      <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest block mb-2">Local Gateway URL</label>
-                      <div className="flex gap-2">
-                        <input 
-                          type="text" 
-                          value={customNodeUrl}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            setCustomNodeUrl(val);
-                            localStorage.setItem('zodit_custom_gateway', val);
-                          }}
-                          placeholder="e.g. https://zodit-gateway.mandev.site"
-                          className="flex-1 bg-black border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-gold/50 transition-all font-mono"
-                        />
-                        <button 
-                          onClick={() => {
-                            setCustomNodeUrl('');
-                            localStorage.removeItem('zodit_custom_gateway');
-                            window.location.reload();
-                          }}
-                          className="px-4 py-2 bg-white/5 hover:bg-white/10 rounded-xl text-[10px] font-bold uppercase transition-all"
-                        >
-                          Reset Default
-                        </button>
-                      </div>
-                      <p className="mt-2 text-[10px] text-white/20 italic">
-                        Leave empty to use the shared managed infrastructure.
-                      </p>
-                    </div>
-                  </div>
-                </div>
+                    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+                        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                            <div className="space-y-2">
+                                <h2 className="text-4xl font-black tracking-tighter uppercase italic">Neural <span className="text-gold">Instance</span></h2>
+                                <p className="text-white/40 font-bold">Monitoriza y vincula tu nodo secundario para control total de hardware.</p>
+                            </div>
+                            <div className={`px-4 py-2 rounded-full text-[10px] font-black uppercase tracking-widest border ${
+                                nodeStatus?.status === 'success' ? 'bg-gold/10 border-gold text-gold' : 'bg-red-500/10 border-red-500 text-red-500'
+                            }`}>
+                                {nodeStatus?.status === 'success' ? '● Local Node Online' : '○ Local Node Offline'}
+                            </div>
+                        </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div className="p-10 bg-zinc-900/40 border border-white/5 rounded-[40px] space-y-6">
-                                    <p className="text-[10px] font-black uppercase tracking-widest text-gold opacity-60">Active Intelligence Model</p>
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                            {/* Health Stats */}
+                            <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div className="p-8 bg-zinc-900/40 border border-white/5 rounded-[32px] space-y-4">
+                                    <div className="flex items-center gap-3 text-white/40">
+                                        <Cpu size={16} />
+                                        <span className="text-[10px] font-black uppercase tracking-widest">CPU LOAD</span>
+                                    </div>
+                                    <div className="text-4xl font-black font-mono">{nodeStatus?.data?.cpu || '0%'}</div>
+                                    <div className="w-full bg-white/5 h-1 rounded-full overflow-hidden">
+                                        <div className="bg-gold h-full transition-all duration-1000" style={{ width: nodeStatus?.data?.cpu || '0%' }} />
+                                    </div>
+                                </div>
+                                <div className="p-8 bg-zinc-900/40 border border-white/5 rounded-[32px] space-y-4">
+                                    <div className="flex items-center gap-3 text-white/40">
+                                        <Smartphone size={16} />
+                                        <span className="text-[10px] font-black uppercase tracking-widest">RAM USAGE</span>
+                                    </div>
+                                    <div className="text-4xl font-black font-mono">{nodeStatus?.data?.ram || '0%'}</div>
+                                    <div className="w-full bg-white/5 h-1 rounded-full overflow-hidden">
+                                        <div className="bg-gold h-full transition-all duration-1000" style={{ width: nodeStatus?.data?.ram || '0%' }} />
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* WhatsApp Linking */}
+                            <div className="p-8 bg-zinc-900/40 border border-white/5 rounded-[32px] flex flex-col items-center justify-center text-center space-y-6 min-h-[400px]">
+                                <div className="flex flex-col items-center space-y-2">
+                                    <MessageSquare className={waStatus === 'connected' ? 'text-gold' : 'text-white/20'} size={40} />
+                                    <h3 className="text-lg font-black uppercase tracking-tight">WhatsApp Link</h3>
+                                    <div className={`text-[9px] font-black uppercase tracking-widest px-3 py-1 rounded-full ${
+                                        waStatus === 'connected' ? 'bg-gold text-black' : 'bg-white/5 text-white/40'
+                                    }`}>
+                                        {waStatus.replace('_', ' ')}
+                                    </div>
+                                </div>
+
+                                {waStatus === 'qr_ready' && qrCode ? (
+                                    <div className="p-4 bg-white rounded-2xl shadow-2xl animate-pulse">
+                                        <img src={qrCode} alt="WhatsApp QR" className="w-48 h-48" />
+                                        <p className="mt-4 text-[9px] text-black font-black uppercase">Scan with WhatsApp</p>
+                                    </div>
+                                ) : waStatus === 'connected' ? (
+                                    <div className="space-y-4">
+                                        <div className="w-20 h-20 bg-gold/10 border border-gold/30 rounded-full flex items-center justify-center mx-auto text-gold">
+                                            <CheckCircle size={32} />
+                                        </div>
+                                        <p className="text-xs text-white/60 font-bold max-w-xs">Tu terminal está vinculada correctamente. JARVIS tiene control móvil.</p>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-2">
+                                        <Loader2 className="animate-spin text-white/10 mx-auto" size={32} />
+                                        <p className="text-[10px] text-white/20 font-bold uppercase tracking-widest">Waiting for socket...</p>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Connection Settings */}
+                        <div className="p-10 bg-zinc-900/40 border border-white/5 rounded-[40px] space-y-8">
+                            <div className="space-y-2">
+                                <h4 className="text-sm font-black uppercase tracking-widest text-gold/60">Gateway Protocol</h4>
+                                <p className="text-[11px] text-white/30 font-bold">Redirige el túnel neural hacia tu procesador físico local.</p>
+                            </div>
+                            
+                            <div className="flex flex-col md:flex-row gap-4">
+                                <input 
+                                    type="text" 
+                                    value={customNodeUrl}
+                                    onChange={(e) => {
+                                        const val = e.target.value;
+                                        setCustomNodeUrl(val);
+                                        localStorage.setItem('zodit_custom_gateway', val);
+                                    }}
+                                    placeholder="Neural Tunnel URL (e.g. https://node.mandev.site)"
+                                    className="flex-1 bg-black border border-white/10 rounded-2xl px-6 py-4 text-sm focus:outline-none focus:border-gold transition-all font-mono"
+                                />
+                                <button 
+                                    onClick={() => {
+                                        setCustomNodeUrl('');
+                                        localStorage.removeItem('zodit_custom_gateway');
+                                        window.location.reload();
+                                    }}
+                                    className="px-8 py-4 bg-white/5 hover:bg-white/10 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all border border-white/5"
+                                >
+                                    Reset Neural Path
+                                </button>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-4">
+                                <div className="space-y-4">
+                                    <label className="text-[10px] font-black text-white/40 uppercase tracking-widest">Active Inference Model</label>
                                     <select 
                                         className="w-full bg-black/40 border border-white/10 rounded-2xl px-6 py-4 text-sm font-bold appearance-none outline-none focus:border-gold/30"
                                         value={activeModel}
                                         onChange={(e) => switchModel(e.target.value)}
                                     >
-                                        <option value="">Default Model</option>
+                                        <option value="">Default Cluster</option>
                                         {models.map(m => (
                                             <option key={m.name} value={m.name}>{m.name}</option>
                                         ))}
                                     </select>
-                                    <p className="text-[10px] font-bold text-white/20">Tu PC local procesa la inferencia mediante Ollama.</p>
                                 </div>
                             </div>
                         </div>
