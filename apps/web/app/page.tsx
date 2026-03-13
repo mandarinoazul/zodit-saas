@@ -2,7 +2,7 @@
 
 import { useState, useEffect, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { Loader2, Terminal as TerminalIcon, ShieldCheck, Zap } from "lucide-react";
+import { Loader2, Terminal as TerminalIcon, ShieldCheck, Zap, Brain, Cpu, CreditCard } from "lucide-react";
 
 import { fetchWithKey } from "../lib/api";
 import { supabase } from "../lib/supabase";
@@ -22,13 +22,21 @@ function DashboardContent() {
   const [skills, setSkills] = useState<{ id: string, enabled: boolean }[]>([]);
   const [models, setModels] = useState<any[]>([]);
   const [activeModel, setActiveModel] = useState("");
+  const [customNodeUrl, setCustomNodeUrl] = useState('');
 
+  // Authentication & Initial Load
   useEffect(() => {
     const checkUser = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       setUser(session?.user || null);
     };
+
     checkUser();
+    
+    // Load custom node from local storage
+    if (typeof window !== 'undefined') {
+        setCustomNodeUrl(localStorage.getItem('zodit_custom_gateway') || '');
+    }
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user || null);
@@ -84,6 +92,10 @@ function DashboardContent() {
   };
 
   const handleAuth = async () => {
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+        alert("CRITICAL ERROR: Supabase Environment Variables are missing in Vercel settings.");
+        return;
+    }
     setIsLoading(true);
     try {
         if (authMode === 'login') {
@@ -95,7 +107,7 @@ function DashboardContent() {
             alert("Check your email for confirmation!");
         }
     } catch (e: any) {
-        alert(e.message);
+        alert(`Authentication Error: ${e.message || "Failed to reach Supabase"}`);
     } finally {
         setIsLoading(false);
     }
@@ -207,16 +219,27 @@ function DashboardContent() {
             </div>
         </div>
 
-        <nav className="flex-1 px-4 space-y-2">
-            <SideItem icon={<TerminalIcon size={18}/>} label="Commander" active={activeTab === 'commander'} onClick={() => setActiveTab('commander')} />
-            <SideItem icon={<ShieldCheck size={18}/>} label="Knowledge" active={activeTab === 'knowledge'} onClick={() => setActiveTab('knowledge')} />
-            <SideItem icon={<Zap size={18}/>} label="Skill Central" active={activeTab === 'skills'} onClick={() => setActiveTab('skills')} />
-            <div className="pt-8 pb-2 px-6">
-                <p className="text-[9px] font-black uppercase tracking-widest text-white/20">System</p>
+        {/* Dashboard Navigation */}
+            <div className="flex-1 px-4 space-y-2 py-6">
+              <SideItem id="commander" icon={<TerminalIcon size={18}/>} label="Commander" active={activeTab === 'commander'} onClick={() => setActiveTab('commander')} />
+              <SideItem id="knowledge" icon={<Brain size={18}/>} label="Knowledge" active={activeTab === 'knowledge'} onClick={() => setActiveTab('knowledge')} />
+              <SideItem id="skills" icon={<Zap size={18}/>} label="Skill Central" active={activeTab === 'skills'} onClick={() => setActiveTab('skills')} />
+              <SideItem id="nodes" icon={<Cpu size={18}/>} label="Nodes & Settings" active={activeTab === 'nodes'} onClick={() => setActiveTab('nodes')} />
+              <SideItem id="billing" icon={<CreditCard size={18}/>} label="Pro Upgrade" active={activeTab === 'billing'} onClick={() => setActiveTab('billing')} />
+              
+              <div className="pt-8 pb-2 px-2 text-[10px] font-bold text-white/20 uppercase tracking-[0.2em]">External</div>
+              <a 
+                href="https://mandev.site" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="flex items-center gap-3 px-4 py-3 rounded-xl text-white/40 hover:text-gold hover:bg-white/5 transition-all duration-300 group"
+              >
+                <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center group-hover:scale-110 group-hover:bg-gold/10 transition-all">
+                  <span className="text-xs font-black">M</span>
+                </div>
+                <span className="text-[13px] font-bold">Daniel's Portfolio</span>
+              </a>
             </div>
-            <SideItem icon={<Loader2 size={18}/>} label="Nodes & Sync" active={activeTab === 'nodes'} onClick={() => setActiveTab('nodes')} />
-            <SideItem icon={<Zap size={18} fill="currentColor"/>} label="Billing / Pro" active={activeTab === 'billing'} onClick={() => setActiveTab('billing')} />
-        </nav>
 
         <div className="p-8 border-t border-white/5 space-y-6">
             <div className="hidden md:block">
@@ -366,7 +389,49 @@ function DashboardContent() {
                     <div className="space-y-12 animate-in fade-in slide-in-from-bottom-4 duration-700">
                         <div className="space-y-8">
                             <h3 className="text-2xl font-black uppercase tracking-tighter">Model & Inference</h3>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                            <div className="bg-white/5 border border-white/10 rounded-2xl p-6 mb-6">
+                  <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-full bg-gold animate-pulse" />
+                    Sovereign Node Configuration
+                  </h3>
+                  <p className="text-sm text-white/40 mb-6">
+                    By default, ZODIT connects to our managed neural node. To use your own local JARVIS, enter your Gateway URL below.
+                  </p>
+                  
+                  <div className="space-y-4">
+                    <div>
+                      <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest block mb-2">Local Gateway URL</label>
+                      <div className="flex gap-2">
+                        <input 
+                          type="text" 
+                          value={customNodeUrl}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setCustomNodeUrl(val);
+                            localStorage.setItem('zodit_custom_gateway', val);
+                          }}
+                          placeholder="e.g. https://zodit-gateway.mandev.site"
+                          className="flex-1 bg-black border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-gold/50 transition-all font-mono"
+                        />
+                        <button 
+                          onClick={() => {
+                            setCustomNodeUrl('');
+                            localStorage.removeItem('zodit_custom_gateway');
+                            window.location.reload();
+                          }}
+                          className="px-4 py-2 bg-white/5 hover:bg-white/10 rounded-xl text-[10px] font-bold uppercase transition-all"
+                        >
+                          Reset Default
+                        </button>
+                      </div>
+                      <p className="mt-2 text-[10px] text-white/20 italic">
+                        Leave empty to use the shared managed infrastructure.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 <div className="p-10 bg-zinc-900/40 border border-white/5 rounded-[40px] space-y-6">
                                     <p className="text-[10px] font-black uppercase tracking-widest text-gold opacity-60">Active Intelligence Model</p>
                                     <select 
@@ -392,7 +457,7 @@ function DashboardContent() {
   );
 }
 
-function SideItem({ icon, label, active, onClick }: { icon: any, label: string, active: boolean, onClick: () => void }) {
+function SideItem({ icon, label, active, onClick }: { id?: string, icon: any, label: string, active: boolean, onClick: () => void }) {
     return (
         <button 
             onClick={onClick}

@@ -1,7 +1,16 @@
 import { supabase } from "./supabase";
 
 export const fetchWithKey = async (endpoint: string, options: RequestInit = {}) => {
-  const gatewayUrl = process.env.NEXT_PUBLIC_GATEWAY_URL || 'http://localhost:8001';
+  // Check for custom gateway URL in localStorage (Client side only)
+  let gatewayUrl = process.env.NEXT_PUBLIC_GATEWAY_URL || 'http://localhost:8001';
+  
+  if (typeof window !== 'undefined') {
+    const customUrl = localStorage.getItem('zodit_custom_gateway');
+    if (customUrl && customUrl.trim() !== '') {
+      gatewayUrl = customUrl;
+    }
+  }
+
   const apiKey = process.env.NEXT_PUBLIC_GATEWAY_SECRET || '';
   
   const { data: { session } } = await supabase.auth.getSession();
